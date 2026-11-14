@@ -1,32 +1,34 @@
-# ============================================================
-# configs/fit.yaml : configuración de ENTRENAMIENTO (proyecto sábila)
-# Misma estructura que el fit.yaml del profesor (clase_arquitectura_cugdl):
-# seed_everything / trainer / model / data
-#
-# Uso: cambia UN valor, guarda, corre la celda que lee este archivo y entrena otra vez.
-# ============================================================
+# Configuracion experimental: clasificacion de Aloe vera
+# Este archivo define experimentos; el notebook debe implementar su lectura.
 
-# Si lo dejas vacío, los resultados van a la carpeta de siempre.
-# Si pones un nombre (p. ej. lr_prueba1), esa corrida se guarda aparte y no se salta.
-experimento: ''
+experimento: clasificacion_sabila
+seed_everything: [42, 7, 2026]
 
-seed_everything: [42]        # para el reporte final: [42, 7, 2026]
-
-# ----------------------------------------------------------
-# Trainer: cómo se entrena
-# ----------------------------------------------------------
 trainer:
-  max_epochs_fase1: 5        # fase 1: solo la cabeza (backbone congelado)
-  max_epochs_fase2: 10       # fase 2: ajuste fino de toda la red
+  max_epochs: 30
   early_stopping:
-    monitor: val/f1_macro    # (informativo) se vigila el F1 macro de validación
-    patience: 4              # épocas sin mejorar antes de detenerse
+    monitor: val/f1_macro
+    mode: max
+    patience: 5
 
-# ----------------------------------------------------------
-# Model: qué redes y con qué pasos
-# ----------------------------------------------------------
 model:
-  backbones: [mobilenet_v3_large, mobilenetv4, dinov3_vit_s, dinov3_convnext_t]
-  pretrained: true           # true = transfer learning
-  lr_fase1: 0.001            # tamaño del paso en la fase 1
-  lr_fase2: 0.0001           # tamaño del paso en la fase 2 (se multiplica por
+  arquitecturas:
+    - dinov3_vit_s16
+    - convnextv2_nano
+    - mobilenetv4_conv_small
+    - yolo26n_cls
+  inicializacion: [desde_cero, preentrenado]
+  num_classes: 3
+  learning_rate: 0.0001
+
+data:
+  raiz_drive: /content/drive/MyDrive/proyecto_sabila/datasets/v1.0.0
+  clases: [Fresh Aloe Vera, Rot Aloe Vera, Rust Aloe Vera]
+  image_size: 224
+  batch_size: 16
+  split: [0.70, 0.15, 0.15]
+
+# Los nombres de arquitectura son etiquetas internas, no identificadores
+# garantizados de librerias. Verificar implementaciones y pesos antes de entrenar.
+# El entrenamiento desde cero de DINOv3 significa inicializar su arquitectura
+# sin pesos preentrenados, no reproducir el preentrenamiento original de Meta.
