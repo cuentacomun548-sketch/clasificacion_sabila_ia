@@ -218,3 +218,39 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# ==========================================
+# PROYECTO: CLASIFICACION DE SABILA
+# ==========================================
+
+# Datasets e imagenes
+datasets/
+data/
+*.jpg
+*.jpeg
+*.png
+*.zip
+
+# Modelos entrenados
+*.pt
+*.pth
+*.h5
+*.keras
+*.ckpt
+*.onnx
+
+# Resultados generados
+outputs/
+runs/
+checkpoints/
+tensorboard/
+
+# Archivos temporales
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Credenciales
+*.key
+credentials.json
+token.json
