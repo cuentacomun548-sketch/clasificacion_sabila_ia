@@ -1,0 +1,17 @@
+
+# MobileNetV4 Conv Small
+# Configuración específica de la arquitectura
+
+nombre: mobilenetv4_conv_small
+familia: convolucional_ligera
+biblioteca: timm
+
+modelo:
+  arquitectura: mobilenetv4_conv_small
+  pesos_preentrenados: mobilenetv4_conv_small.e1200_r224_in1k
+  num_classes: 3
+  tamano_imagen: 224
+
+estrategias:
+  - desde_cero
+  - transferencia
