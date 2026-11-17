@@ -1,0 +1,3 @@
+
+# Dependencias del proyecto de clasificación de Aloe vera
+# Versiones pendientes de verificación
