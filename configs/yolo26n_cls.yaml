@@ -1,0 +1,17 @@
+
+# YOLO26n-cls
+# Configuración específica de la arquitectura
+
+nombre: yolo26n_cls
+familia: yolo_clasificacion
+biblioteca: ultralytics
+
+modelo:
+  arquitectura: yolo26n-cls.yaml
+  pesos_preentrenados: yolo26n-cls.pt
+  num_classes: 3
+  tamano_imagen: 224
+
+estrategias:
+  - desde_cero
+  - transferencia
