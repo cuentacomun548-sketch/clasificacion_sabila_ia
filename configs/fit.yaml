@@ -1,31 +1,23 @@
 
-# ============================================================
-# Proyecto: clasificación multiclase de Aloe vera
-# Archivo: configs/fit.yaml
-# Configuración experimental central
-# ============================================================
-
 experimento: clasificacion_sabila
 
-# Semillas para repetir los experimentos.
-# La partición de datos permanece fija.
-seed_everything: [42, 7, 2026]
+seed_everything: [42, 7]
 
 trainer:
   dispositivo: auto
   precision: fp32
 
   desde_cero:
-    max_epochs: 50
+    max_epochs: 15
 
   transferencia:
     max_epochs_fase1: 5
-    max_epochs_fase2: 20
+    max_epochs_fase2: 10
 
   early_stopping:
     monitor: val/f1_macro
     mode: max
-    patience: 5
+    patience: 4
 
 model:
   backbones:
@@ -39,7 +31,6 @@ model:
     - transferencia
 
   num_classes: 3
-
   optimizer: adamw
   lr_desde_cero: 0.001
   lr_fase1: 0.001
