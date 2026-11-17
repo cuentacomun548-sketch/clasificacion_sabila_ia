@@ -1,3 +1,30 @@
 
 # Dependencias del proyecto de clasificación de Aloe vera
 # Versiones pendientes de verificación
+
+# Proyecto de clasificación de Aloe vera
+# Dependencias para Google Colab y PyTorch
+
+# Entrenamiento y evaluación
+lightning
+torchmetrics
+scikit-learn
+
+# Arquitecturas de visión artificial
+timm
+transformers
+ultralytics
+
+# Datos e imágenes
+numpy
+pandas
+Pillow
+PyYAML
+
+# Visualización y seguimiento
+matplotlib
+seaborn
+tensorboard
+
+# Análisis del costo computacional
+psutil
