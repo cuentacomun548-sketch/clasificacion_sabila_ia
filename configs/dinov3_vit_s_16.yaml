@@ -1,0 +1,17 @@
+
+# DINOv3 ViT-S/16
+# Configuración específica de la arquitectura
+
+nombre: dinov3_vit_s_16
+familia: transformer
+biblioteca: timm
+
+modelo:
+  arquitectura: vit_small_patch16_dinov3
+  pesos_preentrenados: vit_small_patch16_dinov3.lvd1689m
+  num_classes: 3
+  tamano_imagen: 224
+
+estrategias:
+  - desde_cero
+  - transferencia
