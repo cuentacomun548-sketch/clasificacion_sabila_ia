@@ -1,0 +1,17 @@
+
+# ConvNeXt V2 Nano
+# Configuración específica de la arquitectura
+
+nombre: convnextv2_nano
+familia: convolucional
+biblioteca: timm
+
+modelo:
+  arquitectura: convnextv2_nano
+  pesos_preentrenados: convnextv2_nano.fcmae_ft_in1k
+  num_classes: 3
+  tamano_imagen: 224
+
+estrategias:
+  - desde_cero
+  - transferencia
