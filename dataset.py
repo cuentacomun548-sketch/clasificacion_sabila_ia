@@ -7,16 +7,15 @@ import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 
 
-# Valores de referencia de ImageNet.
-# Se pueden sustituir por los específicos de cada arquitectura.
 MEDIA_IMAGENET = (0.485, 0.456, 0.406)
 DESVIACION_IMAGENET = (0.229, 0.224, 0.225)
 
 
 class SabilaDataset(Dataset):
-    """Lee las imágenes y etiquetas del manifiesto de particiones."""
+    """Lee las imágenes y etiquetas del manifiesto."""
 
     def __init__(self, manifiesto, subconjunto, transformacion=None):
         tabla = pd.read_csv(manifiesto)
@@ -53,24 +52,56 @@ def crear_transformaciones(
     entrenamiento=False,
     media=MEDIA_IMAGENET,
     desviacion=DESVIACION_IMAGENET,
+    interpolacion="bicubic",
+    recorte=1.0,
 ):
-    """Prepara y normaliza imágenes para una arquitectura."""
+    """Prepara imágenes con los parámetros de cada modelo."""
+
+    if tamano <= 0:
+        raise ValueError("El tamaño debe ser positivo.")
+
+    if not 0 < recorte <= 1:
+        raise ValueError("El recorte debe estar entre 0 y 1.")
 
     if len(media) != 3 or len(desviacion) != 3:
-        raise ValueError("La media y desviación deben tener 3 valores RGB.")
+        raise ValueError("Se necesitan tres valores RGB.")
 
     if any(valor <= 0 for valor in desviacion):
-        raise ValueError("Las desviaciones deben ser mayores que cero.")
+        raise ValueError("La desviación debe ser positiva.")
 
-    operaciones = [
-        transforms.Resize((tamano, tamano)),
-    ]
+    interpolaciones = {
+        "bicubic": InterpolationMode.BICUBIC,
+        "bilinear": InterpolationMode.BILINEAR,
+        "nearest": InterpolationMode.NEAREST,
+    }
 
+    if interpolacion not in interpolaciones:
+        raise ValueError("Interpolación no reconocida.")
+
+    metodo = interpolaciones[interpolacion]
+
+    # Conserva la imagen completa durante el entrenamiento.
     if entrenamiento:
-        operaciones.extend([
+        operaciones = [
+            transforms.Resize(
+                (tamano, tamano),
+                interpolation=metodo,
+            ),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(15),
-        ])
+        ]
+    else:
+        # Preparación de validación y prueba.
+        # Respeta el porcentaje de recorte del modelo.
+        tamano_previo = round(tamano / recorte)
+
+        operaciones = [
+            transforms.Resize(
+                tamano_previo,
+                interpolation=metodo,
+            ),
+            transforms.CenterCrop(tamano),
+        ]
 
     operaciones.extend([
         transforms.ToTensor(),
@@ -89,13 +120,14 @@ def crear_dataloaders(
     media=MEDIA_IMAGENET,
     desviacion=DESVIACION_IMAGENET,
     biblioteca="timm",
+    interpolacion="bicubic",
+    recorte=1.0,
 ):
-    """Crea los cargadores de entrenamiento, validación y prueba."""
+    """Crea cargadores para entrenamiento, validación y prueba."""
 
     if biblioteca != "timm":
         raise ValueError(
-            "Este cargador es para modelos timm. "
-            "YOLO26n-cls utilizará el cargador de Ultralytics."
+            "YOLO26n-cls utiliza el cargador de Ultralytics."
         )
 
     ruta = (
@@ -121,6 +153,8 @@ def crear_dataloaders(
                 entrenamiento=(subconjunto == "train"),
                 media=media,
                 desviacion=desviacion,
+                interpolacion=interpolacion,
+                recorte=recorte,
             ),
         )
 
