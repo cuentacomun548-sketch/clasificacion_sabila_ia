@@ -1,28 +1,42 @@
 
+# ============================================================
+# PROYECTO: CLASIFICACION DE SABILA
+# Configuracion general del experimento
+# ============================================================
+
 experimento: clasificacion_sabila
 
+# Dos semillas para evaluar la variabilidad
 seed_everything: [42, 7]
+
+# ============================================================
+# ENTRENAMIENTO
+# ============================================================
 
 trainer:
   dispositivo: auto
   precision: fp32
 
+  # Entrenamiento completo con pesos aleatorios
   desde_cero:
     max_epochs: 15
 
+  # Transferencia en una sola fase de ajuste fino
   transferencia:
-    max_epochs_fase1: 5
-    max_epochs_fase2: 10
+    max_epochs: 15
 
   early_stopping:
     monitor: val/f1_macro
     mode: max
     patience: 4
 
+# ============================================================
+# MODELOS
+# ============================================================
+
 model:
   backbones:
     - dinov3_vit_s_16
-    - convnextv2_nano
     - mobilenetv4_conv_small
     - yolo26n_cls
 
@@ -31,11 +45,17 @@ model:
     - transferencia
 
   num_classes: 3
+
   optimizer: adamw
+
   lr_desde_cero: 0.001
-  lr_fase1: 0.001
-  lr_fase2: 0.0001
+  lr_transferencia: 0.0001
+
   weight_decay: 0.0001
+
+# ============================================================
+# DATASET
+# ============================================================
 
 data:
   ruta: /content/drive/MyDrive/proyecto_sabila/datasets/v1.0.0
@@ -51,11 +71,17 @@ data:
     prueba: 0.15
 
   semilla_particion: 42
+
   batch_size: 16
   num_workers: 2
 
+# ============================================================
+# EVALUACION
+# ============================================================
+
 evaluacion:
   metrica_principal: f1_macro
+
   metricas:
     - accuracy
     - balanced_accuracy
@@ -65,8 +91,13 @@ evaluacion:
 
   prueba_solo_al_final: true
 
+# ============================================================
+# RESULTADOS
+# ============================================================
+
 resultados:
   ruta: /content/drive/MyDrive/proyecto_sabila/resultados
+
   guardar_mejor_modelo: true
   guardar_curvas: true
   guardar_matriz_confusion: true
