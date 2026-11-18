@@ -1,5 +1,5 @@
 
-"""Carga de imágenes de Aloe vera para PyTorch."""
+"""Carga y preparación de imágenes de Aloe vera para PyTorch."""
 
 from pathlib import Path
 
@@ -7,6 +7,12 @@ import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+
+
+# Valores de referencia de ImageNet.
+# Se pueden sustituir por los específicos de cada arquitectura.
+MEDIA_IMAGENET = (0.485, 0.456, 0.406)
+DESVIACION_IMAGENET = (0.229, 0.224, 0.225)
 
 
 class SabilaDataset(Dataset):
@@ -33,8 +39,8 @@ class SabilaDataset(Dataset):
     def __getitem__(self, indice):
         fila = self.datos.iloc[indice]
 
-        with Image.open(Path(fila["ruta"])) as imagen:
-            imagen = imagen.convert("RGB")
+        with Image.open(Path(fila["ruta"])) as archivo:
+            imagen = archivo.convert("RGB")
 
         if self.transformacion is not None:
             imagen = self.transformacion(imagen)
@@ -42,9 +48,23 @@ class SabilaDataset(Dataset):
         return imagen, int(fila["etiqueta"])
 
 
-def crear_transformaciones(tamano=224, entrenamiento=False):
-    """Transformaciones iniciales; podrán adaptarse por arquitectura."""
-    operaciones = [transforms.Resize((tamano, tamano))]
+def crear_transformaciones(
+    tamano=224,
+    entrenamiento=False,
+    media=MEDIA_IMAGENET,
+    desviacion=DESVIACION_IMAGENET,
+):
+    """Prepara y normaliza imágenes para una arquitectura."""
+
+    if len(media) != 3 or len(desviacion) != 3:
+        raise ValueError("La media y desviación deben tener 3 valores RGB.")
+
+    if any(valor <= 0 for valor in desviacion):
+        raise ValueError("Las desviaciones deben ser mayores que cero.")
+
+    operaciones = [
+        transforms.Resize((tamano, tamano)),
+    ]
 
     if entrenamiento:
         operaciones.extend([
@@ -52,17 +72,42 @@ def crear_transformaciones(tamano=224, entrenamiento=False):
             transforms.RandomRotation(15),
         ])
 
-    operaciones.append(transforms.ToTensor())
+    operaciones.extend([
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=media,
+            std=desviacion,
+        ),
+    ])
 
     return transforms.Compose(operaciones)
 
 
-def crear_dataloaders(config, tamano=224):
+def crear_dataloaders(
+    config,
+    tamano=224,
+    media=MEDIA_IMAGENET,
+    desviacion=DESVIACION_IMAGENET,
+    biblioteca="timm",
+):
     """Crea los cargadores de entrenamiento, validación y prueba."""
-    ruta = Path(config["resultados"]["ruta"]) / "datos" / "particiones.csv"
+
+    if biblioteca != "timm":
+        raise ValueError(
+            "Este cargador es para modelos timm. "
+            "YOLO26n-cls utilizará el cargador de Ultralytics."
+        )
+
+    ruta = (
+        Path(config["resultados"]["ruta"])
+        / "datos"
+        / "particiones.csv"
+    )
 
     if not ruta.is_file():
-        raise FileNotFoundError(f"No existe el manifiesto: {ruta}")
+        raise FileNotFoundError(
+            f"No existe el manifiesto: {ruta}"
+        )
 
     datos = config["data"]
     cargadores = {}
@@ -74,6 +119,8 @@ def crear_dataloaders(config, tamano=224):
             transformacion=crear_transformaciones(
                 tamano=tamano,
                 entrenamiento=(subconjunto == "train"),
+                media=media,
+                desviacion=desviacion,
             ),
         )
 
