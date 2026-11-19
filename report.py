@@ -1,7 +1,5 @@
-"""Informe reproducible del experimento de clasificación de sábila.
-
+"""Informe de clasificación de sábila. Solo lee resultados guardados.
 Uso: python report.py --config configs/fit.yaml
-No entrena modelos ni realiza inferencia: solo lee resultados guardados.
 """
 import argparse
 import json
@@ -15,16 +13,24 @@ import pandas as pd
 import yaml
 
 MODELOS = ['dinov3_vit_s_16', 'mobilenetv4_conv_small', 'yolo26n_cls']
+NOMBRES = {'dinov3_vit_s_16': 'DINOv3', 'mobilenetv4_conv_small': 'MobileNetV4', 'yolo26n_cls': 'YOLO26n-cls'}
 ESTRATEGIAS = ['desde_cero', 'transferencia']
 SEMILLAS = [7, 42]
+CLASES = {'Fresh Aloe Vera': 'Sana', 'Rot Aloe Vera': 'Podredumbre', 'Rust Aloe Vera': 'Roya'}
 
 
-def guardar_figura(fig, ruta):
-    fig.savefig(ruta, dpi=180, bbox_inches='tight')
+def guardar(fig, ruta):
+    fig.savefig(ruta, dpi=160, bbox_inches='tight', facecolor='white')
     plt.close(fig)
 
 
-def validacion(entrenamientos, salida):
+def estilo():
+    plt.rcParams.update({'font.family': 'DejaVu Sans', 'font.size': 9,
+                         'axes.spines.top': False, 'axes.spines.right': False,
+                         'figure.facecolor': 'white', 'axes.facecolor': 'white'})
+
+
+def leer_validacion(entrenamientos, salida):
     filas = []
     for modelo in MODELOS:
         for estrategia in ESTRATEGIAS:
@@ -32,166 +38,198 @@ def validacion(entrenamientos, salida):
                 ruta = entrenamientos / modelo / estrategia / f'semilla_{semilla}' / 'resultado.json'
                 if not ruta.is_file():
                     raise FileNotFoundError(f'Falta resultado de entrenamiento: {ruta}')
-                with ruta.open(encoding='utf-8') as archivo:
-                    registro = json.load(archivo)
-                filas.append({'modelo': modelo, 'estrategia': estrategia,
-                              'semilla': semilla, 'f1_validacion': float(registro['mejor_f1_validacion'])})
+                with ruta.open(encoding='utf-8') as f:
+                    registro = json.load(f)
+                filas.append({'modelo': modelo, 'estrategia': estrategia, 'semilla': semilla,
+                              'f1_validacion': float(registro['mejor_f1_validacion'])})
     detalle = pd.DataFrame(filas)
     detalle.to_csv(salida / 'validacion_por_ejecucion.csv', index=False)
     resumen = detalle.groupby(['modelo', 'estrategia'], sort=False).agg(
         f1_promedio=('f1_validacion', 'mean'),
         f1_desviacion=('f1_validacion', 'std')).reset_index()
     resumen.to_csv(salida / 'resumen_validacion.csv', index=False)
-    print('\nVALIDACIÓN: F1 MACRO (PROMEDIO Y DESVIACIÓN)')
-    print(resumen.round(4).to_string(index=False))
     return resumen
 
 
-def comparativa(resumen_val, resumen_test, salida):
-    nombres = {'dinov3_vit_s_16': 'DINOv3',
-               'mobilenetv4_conv_small': 'MobileNetV4',
-               'yolo26n_cls': 'YOLO26n-cls'}
-    fig, ejes = plt.subplots(1, 2, figsize=(10, 3.9), sharey=True,
-                            constrained_layout=True)
-    for eje, tabla, titulo in [(ejes[0], resumen_val, 'Validación (347 imágenes)'),
-                               (ejes[1], resumen_test, 'Prueba (349 imágenes)')]:
-        etiquetas = [f'{nombres.get(m, m)}\n{"Cero" if e == "desde_cero" else "Transfer."}'
-                     for m, e in zip(tabla['modelo'], tabla['estrategia'])]
-        x = np.arange(len(tabla))
-        barras = eje.bar(x, tabla['f1_promedio'], yerr=tabla['f1_desviacion'], capsize=3,
-                         width=0.65)
-        for barra, valor, desviacion in zip(barras, tabla['f1_promedio'], tabla['f1_desviacion']):
-            eje.text(barra.get_x() + barra.get_width() / 2,
-                     min(float(valor) + float(desviacion) + 0.014, 1.075),
-                     f'{valor:.4f}', ha='center', va='bottom', fontsize=7)
-        eje.set_xticks(x, etiquetas, fontsize=7)
-        eje.set_ylim(0, 1.11)
-        eje.set_title(titulo, fontsize=11)
-        eje.grid(axis='y', alpha=0.2)
-        eje.set_axisbelow(True)
-    ejes[0].set_ylabel('F1 macro')
-    fig.suptitle('F1 macro promedio ± desviación estándar (semillas 7 y 42)', fontsize=11)
-    guardar_figura(fig, salida / 'comparacion_f1.png')
+def imprimir_tabla(tabla, titulo):
+    vista = tabla[['modelo', 'estrategia', 'f1_promedio', 'f1_desviacion']].copy()
+    vista['modelo'] = vista['modelo'].replace(NOMBRES)
+    vista['estrategia'] = vista['estrategia'].replace({'desde_cero': 'Desde cero', 'transferencia': 'Transferencia'})
+    vista.columns = ['Arquitectura', 'Estrategia', 'F1 macro medio', 'Desv. estándar']
+    print('\n' + titulo + ' | semillas 7 y 42')
+    print(vista.round(4).to_string(index=False))
 
 
-def curvas(entrenamientos, salida):
+def comparativa(val, prueba, salida):
+    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.2), sharey=True, layout='constrained')
+    for ax, tabla, titulo in zip(axes, [val, prueba], ['Validación (347 imágenes)', 'Prueba (349 imágenes)']):
+        tabla = tabla.set_index(['modelo', 'estrategia']).reindex(
+            pd.MultiIndex.from_product([MODELOS, ESTRATEGIAS])).reset_index()
+        valores = tabla['f1_promedio'].astype(float).to_numpy()
+        desv = tabla['f1_desviacion'].fillna(0).astype(float).to_numpy()
+        x = np.arange(6)
+        colores = ['#7898ad' if i % 2 == 0 else '#326e83' for i in x]
+        ax.bar(x, valores, color=colores, width=.66, yerr=desv, capsize=3, ecolor='#333333')
+        ax.set_xticks(x, [f'{NOMBRES[MODELOS[i // 2]]}\n{"Cero" if i % 2 == 0 else "Transfer."}' for i in x], fontsize=8)
+        ax.set_ylim(0, 1.10)
+        ax.set_yticks(np.arange(0, 1.01, .2))
+        ax.set_title(titulo, fontsize=11)
+        ax.grid(axis='y', alpha=.17)
+        ax.set_axisbelow(True)
+        for xi, y, sd in zip(x, valores, desv):
+            ax.text(xi, min(y + sd + .018, 1.065), f'{y:.4f}', ha='center', fontsize=7.5)
+    axes[0].set_ylabel('F1 macro')
+    fig.suptitle('Desempeño medio ± desviación estándar | semillas 7 y 42', fontsize=12)
+    guardar(fig, salida / 'comparacion_f1.png')
+
+
+def leer_tensorboard(carpeta):
     try:
         from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
     except ImportError:
-        print('Curvas omitidas: tensorboard no está instalado.')
-        return
-    fig, ejes = plt.subplots(2, 2, figsize=(9, 6.5), sharex=False, constrained_layout=True)
-    metricas = [('train/loss', 'Pérdida de entrenamiento'),
-                ('val/loss', 'Pérdida de validación'),
-                ('val/f1_macro', 'F1 macro de validación')]
-    halladas = 0
-    for modelo in MODELOS[:2]:
-        for estrategia in ESTRATEGIAS:
-            carpeta = entrenamientos / modelo / estrategia / 'semilla_42' / 'tensorboard'
-            if not carpeta.is_dir():
-                continue
-            eventos = list(carpeta.rglob('events.out.tfevents.*'))
-            if not eventos:
-                continue
-            # TensorBoardLogger escribe en .../tensorboard/entrenamiento.
-            directorios = sorted({p.parent for p in eventos})
-            for directorio in directorios:
-                try:
-                    acc = EventAccumulator(str(directorio), size_guidance={'scalars': 0})
-                    acc.Reload()
-                    tags = acc.Tags().get('scalars', [])
-                    if not any(t in tags for t, _ in metricas):
-                        continue
-                    fila = MODELOS.index(modelo)
-                    col = ESTRATEGIAS.index(estrategia)
-                    eje = ejes[fila, col]
-                    for tag, nombre in metricas:
-                        if tag in tags:
-                            puntos = acc.Scalars(tag)
-                            eje.plot([p.step for p in puntos], [p.value for p in puntos], label=nombre)
-                    eje.set_title(f'{modelo.split("_")[0]} | {"Cero" if estrategia == "desde_cero" else "Transferencia"} | semilla 42', fontsize=10)
-                    eje.set_xlabel('Paso de entrenamiento')
-                    eje.grid(alpha=0.2)
-                    eje.legend(fontsize=7)
-                    halladas += 1
-                    break
-                except Exception as exc:
-                    print(f'No se pudo leer {directorio}: {exc}')
-    if halladas:
-        fig.suptitle('Curvas registradas en TensorBoard (semilla 42)')
-        guardar_figura(fig, salida / 'curvas.png')
-    else:
-        plt.close(fig)
-        print('No se encontraron curvas legibles en los registros de TensorBoard.')
+        print('AVISO: tensorboard no está instalado; se omiten curvas de DINOv3/MobileNetV4.')
+        return {}
+    eventos = sorted(carpeta.rglob('events.out.tfevents.*')) if carpeta.exists() else []
+    por_tag = {}
+    for directorio in sorted({p.parent for p in eventos}):
+        try:
+            acc = EventAccumulator(str(directorio), size_guidance={'scalars': 0})
+            acc.Reload()
+            for tag in ['train/loss', 'val/loss', 'val/f1_macro']:
+                if tag in acc.Tags().get('scalars', []) and tag not in por_tag:
+                    puntos = acc.Scalars(tag)
+                    if puntos:
+                        por_tag[tag] = ([p.step for p in puntos], [p.value for p in puntos])
+        except Exception as exc:
+            print(f'AVISO: no se pudo leer {directorio}: {exc}')
+    return por_tag
+
+
+def leer_yolo(carpeta):
+    archivos = sorted(carpeta.rglob('results.csv')) if carpeta.exists() else []
+    if not archivos:
+        return {}
+    df = pd.read_csv(archivos[0])
+    df.columns = df.columns.str.strip()
+    x = df['epoch'].to_numpy() if 'epoch' in df else np.arange(1, len(df) + 1)
+    return {col: (x, pd.to_numeric(df[col], errors='coerce').to_numpy())
+            for col in ['train/loss', 'val/loss', 'metrics/accuracy_top1'] if col in df}
+
+
+def curvas(entrenamientos, salida):
+    # Una figura por arquitectura: 2 estrategias x 2 semillas; cada panel separa pérdida y métrica.
+    for modelo in MODELOS:
+        fig, axes = plt.subplots(2, 2, figsize=(10.4, 6.4), layout='constrained')
+        encontradas = 0
+        for fila, estrategia in enumerate(ESTRATEGIAS):
+            for col, semilla in enumerate(SEMILLAS):
+                ax = axes[fila, col]
+                carpeta = entrenamientos / modelo / estrategia / f'semilla_{semilla}'
+                if modelo == 'yolo26n_cls':
+                    datos = leer_yolo(carpeta)
+                    metrica = 'metrics/accuracy_top1'
+                    etiqueta_metrica = 'Exactitud top-1 (validación)'
+                    eje_x = 'Época'
+                else:
+                    datos = leer_tensorboard(carpeta / 'tensorboard')
+                    metrica = 'val/f1_macro'
+                    etiqueta_metrica = 'F1 macro (validación)'
+                    eje_x = 'Paso de entrenamiento'
+                if not datos:
+                    ax.text(.5, .5, 'Registro no disponible', transform=ax.transAxes,
+                            ha='center', va='center', color='#666666')
+                else:
+                    encontradas += 1
+                    for tag, label, color in [('train/loss', 'Entrenamiento', '#326e83'),
+                                               ('val/loss', 'Validación', '#c37d43')]:
+                        if tag in datos:
+                            ax.plot(*datos[tag], label=f'Pérdida: {label}', color=color, lw=1.8)
+                    if metrica in datos:
+                        ax2 = ax.twinx()
+                        ax2.plot(*datos[metrica], label=etiqueta_metrica, color='#66936d', lw=1.6, linestyle='--')
+                        ax2.set_ylim(0, 1.05)
+                        ax2.set_ylabel(etiqueta_metrica, fontsize=8, color='#426d49')
+                        ax2.tick_params(axis='y', labelsize=7)
+                        ax2.spines['top'].set_visible(False)
+                ax.set_title(f'{"Desde cero" if estrategia == "desde_cero" else "Transferencia"} | semilla {semilla}', fontsize=10)
+                ax.set_xlabel(eje_x, fontsize=8)
+                ax.set_ylabel('Pérdida', fontsize=8)
+                ax.tick_params(labelsize=8)
+                ax.grid(alpha=.15)
+        handles, labels = axes[0, 0].get_legend_handles_labels()
+        if handles:
+            fig.legend(handles, labels, loc='lower center', ncol=2, fontsize=8,
+                       bbox_to_anchor=(.5, -.015))
+        fig.suptitle(f'{NOMBRES[modelo]} | evolución del entrenamiento', fontsize=12)
+        if encontradas:
+            guardar(fig, salida / f'curvas_{modelo}.png')
+        else:
+            plt.close(fig)
+            print(f'AVISO: sin curvas para {modelo}')
 
 
 def matrices(ruta_test, salida):
-    # Una matriz por combinación (semilla 42), con etiquetas breves y sin solapamientos.
-    nombres = {'dinov3_vit_s_16': 'DINOv3',
-               'mobilenetv4_conv_small': 'MobileNetV4',
-               'yolo26n_cls': 'YOLO26n-cls'}
-    clases = {'Fresh Aloe Vera': 'Sana', 'Rot Aloe Vera': 'Podredumbre',
-              'Rust Aloe Vera': 'Roya'}
-    fig, ejes = plt.subplots(3, 2, figsize=(8.5, 9),
-                            constrained_layout=True)
-    for i, modelo in enumerate(MODELOS):
-        for j, estrategia in enumerate(ESTRATEGIAS):
-            archivo = ruta_test / f'matriz_{modelo}_{estrategia}_semilla_42.csv'
-            if not archivo.is_file():
-                raise FileNotFoundError(f'Falta matriz de confusión: {archivo}')
-            matriz = pd.read_csv(archivo, index_col=0)
-            eje = ejes[i, j]
-            valores = matriz.to_numpy()
-            eje.imshow(valores, cmap='Blues', vmin=0)
-            etiquetas_x = [clases.get(str(s).removeprefix('pred_'), str(s).removeprefix('pred_'))
-                           for s in matriz.columns]
-            etiquetas_y = [clases.get(str(s).removeprefix('real_'), str(s).removeprefix('real_'))
-                           for s in matriz.index]
-            eje.set_xticks(range(len(etiquetas_x)), etiquetas_x, fontsize=9)
-            eje.set_yticks(range(len(etiquetas_y)), etiquetas_y, fontsize=9)
-            eje.tick_params(axis='x', labelrotation=0)
-            eje.set_title(f'{nombres.get(modelo, modelo)} | '
-                          f'{"Desde cero" if estrategia == "desde_cero" else "Transferencia"}',
-                          fontsize=10, pad=7)
-            eje.set_xlabel('Predicción', fontsize=9)
-            eje.set_ylabel('Clase real', fontsize=9)
-            umbral = valores.max() / 2
-            for (y, x), numero in np.ndenumerate(valores):
-                eje.text(x, y, str(int(numero)), ha='center', va='center', fontsize=11,
-                         color='white' if numero > umbral else 'black')
-    fig.suptitle('Matrices de confusión en prueba | semilla 42', fontsize=12)
-    guardar_figura(fig, salida / 'matrices_confusion.png')
+    for semilla in SEMILLAS:
+        fig, axes = plt.subplots(3, 2, figsize=(8.5, 9.3), layout='constrained')
+        # Escala común en los seis paneles, para comparar los conteos.
+        matrices_leidas = {}
+        maximo = 0
+        for modelo in MODELOS:
+            for estrategia in ESTRATEGIAS:
+                ruta = ruta_test / f'matriz_{modelo}_{estrategia}_semilla_{semilla}.csv'
+                if not ruta.is_file():
+                    raise FileNotFoundError(f'Falta matriz de confusión: {ruta}')
+                tabla = pd.read_csv(ruta, index_col=0)
+                matrices_leidas[(modelo, estrategia)] = tabla
+                maximo = max(maximo, int(tabla.to_numpy().max()))
+        for i, modelo in enumerate(MODELOS):
+            for j, estrategia in enumerate(ESTRATEGIAS):
+                ax = axes[i, j]
+                tabla = matrices_leidas[(modelo, estrategia)]
+                valores = tabla.to_numpy()
+                ax.imshow(valores, cmap='Blues', vmin=0, vmax=maximo)
+                etiquetas_x = [CLASES.get(str(s).removeprefix('pred_'), str(s).removeprefix('pred_')) for s in tabla.columns]
+                etiquetas_y = [CLASES.get(str(s).removeprefix('real_'), str(s).removeprefix('real_')) for s in tabla.index]
+                ax.set_xticks(range(len(etiquetas_x)), etiquetas_x, fontsize=8)
+                ax.set_yticks(range(len(etiquetas_y)), etiquetas_y, fontsize=8)
+                ax.set_title(f'{NOMBRES[modelo]} | {"Desde cero" if estrategia == "desde_cero" else "Transferencia"}', fontsize=10)
+                ax.set_xlabel('Predicción', fontsize=8)
+                ax.set_ylabel('Clase real', fontsize=8)
+                for (r, c), n in np.ndenumerate(valores):
+                    ax.text(c, r, str(int(n)), ha='center', va='center', fontsize=11,
+                            color='white' if n > maximo * .52 else 'black')
+        fig.suptitle(f'Matrices de confusión | prueba (349 imágenes) | semilla {semilla}', fontsize=12)
+        guardar(fig, salida / f'matrices_confusion_semilla_{semilla}.png')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', default='configs/fit.yaml')
     args = parser.parse_args()
-    with open(args.config, encoding='utf-8') as archivo:
-        config = yaml.safe_load(archivo)
+    with open(args.config, encoding='utf-8') as f:
+        config = yaml.safe_load(f)
     base = Path(config['resultados']['ruta']) / 'experimento_una_fase_2026'
-    entrenamientos = base / 'entrenamientos'
-    ruta_test = base / 'evaluacion_test'
-    salida = base / 'informe'
+    entrenamientos, ruta_test, salida = base / 'entrenamientos', base / 'evaluacion_test', base / 'informe'
     salida.mkdir(parents=True, exist_ok=True)
-    resumen_val = validacion(entrenamientos, salida)
-    archivo_test = ruta_test / 'resumen_prueba.csv'
-    if not archivo_test.is_file():
-        raise FileNotFoundError(f'Falta evaluación final: {archivo_test}')
-    resumen_test = pd.read_csv(archivo_test)
+    estilo()
+    resumen_val = leer_validacion(entrenamientos, salida)
+    ruta = ruta_test / 'resumen_prueba.csv'
+    if not ruta.is_file():
+        raise FileNotFoundError(f'Falta evaluación final: {ruta}')
+    resumen_test = pd.read_csv(ruta)
     esperadas = {(m, e) for m in MODELOS for e in ESTRATEGIAS}
     if set(zip(resumen_test['modelo'], resumen_test['estrategia'])) != esperadas:
         raise ValueError('El resumen de prueba no contiene las seis combinaciones esperadas')
     resumen_test.to_csv(salida / 'resumen_prueba.csv', index=False)
-    print('\nPRUEBA: F1 MACRO (PROMEDIO Y DESVIACIÓN)')
-    print(resumen_test[['modelo', 'estrategia', 'f1_promedio', 'f1_desviacion']].round(4).to_string(index=False))
+    imprimir_tabla(resumen_val, 'VALIDACIÓN: F1 macro (347 imágenes)')
+    imprimir_tabla(resumen_test, 'PRUEBA: F1 macro (349 imágenes)')
     comparativa(resumen_val, resumen_test, salida)
     curvas(entrenamientos, salida)
     matrices(ruta_test, salida)
     print(f'\nInforme generado en: {salida}')
-    print('Figuras: comparacion_f1.png, matrices_confusion.png y curvas.png (si hay registros).')
+    print('Figuras: comparacion_f1.png, curvas_<arquitectura>.png y matrices_confusion_semilla_<7|42>.png')
+    print('Nota: las curvas representan registros históricos; la evaluación usa el mejor checkpoint guardado.')
 
 
 if __name__ == '__main__':
     main()
-
