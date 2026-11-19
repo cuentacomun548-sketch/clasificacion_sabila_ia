@@ -48,19 +48,25 @@ def validacion(entrenamientos, salida):
 
 
 def comparativa(resumen_val, resumen_test, salida):
-    fig, ejes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
-    for eje, tabla, titulo in [(ejes[0], resumen_val, 'Validación'),
-                               (ejes[1], resumen_test, 'Prueba')]:
-        etiquetas = [f'{m.replace("_", " ")}\n{e.replace("_", " ")}'
+    nombres = {'dinov3_vit_s_16': 'DINOv3',
+               'mobilenetv4_conv_small': 'MobileNetV4',
+               'yolo26n_cls': 'YOLO26n-cls'}
+    fig, ejes = plt.subplots(1, 2, figsize=(12, 4.7), sharey=True,
+                            constrained_layout=True)
+    for eje, tabla, titulo in [(ejes[0], resumen_val, 'Validación (347 imágenes)'),
+                               (ejes[1], resumen_test, 'Prueba (349 imágenes)')]:
+        etiquetas = [f'{nombres.get(m, m)}\n{"Cero" if e == "desde_cero" else "Transfer."}'
                      for m, e in zip(tabla['modelo'], tabla['estrategia'])]
         x = np.arange(len(tabla))
-        eje.bar(x, tabla['f1_promedio'], yerr=tabla['f1_desviacion'], capsize=3)
-        eje.set_xticks(x, etiquetas, rotation=55, ha='right', fontsize=8)
-        eje.set_ylim(0, 1.08)
-        eje.set_title(f'F1 macro: {titulo}')
-        eje.grid(axis='y', alpha=0.25)
+        eje.bar(x, tabla['f1_promedio'], yerr=tabla['f1_desviacion'], capsize=3,
+                width=0.7)
+        eje.set_xticks(x, etiquetas, fontsize=8)
+        eje.set_ylim(0, 1.06)
+        eje.set_title(titulo, fontsize=11)
+        eje.grid(axis='y', alpha=0.2)
+        eje.set_axisbelow(True)
     ejes[0].set_ylabel('F1 macro')
-    fig.suptitle('Desempeño por arquitectura y estrategia (2 semillas)')
+    fig.suptitle('F1 macro promedio ± desviación estándar (semillas 7 y 42)', fontsize=12)
     guardar_figura(fig, salida / 'comparacion_f1.png')
 
 
@@ -99,7 +105,7 @@ def curvas(entrenamientos, salida):
                         if tag in tags:
                             puntos = acc.Scalars(tag)
                             eje.plot([p.step for p in puntos], [p.value for p in puntos], label=nombre)
-                    eje.set_title(f'{modelo} | {estrategia} | semilla 42')
+                    eje.set_title(f'{modelo.split("_")[0]} | {"Cero" if estrategia == "desde_cero" else "Transferencia"} | semilla 42', fontsize=10)
                     eje.set_xlabel('Paso de entrenamiento')
                     eje.grid(alpha=0.2)
                     eje.legend(fontsize=7)
@@ -116,8 +122,14 @@ def curvas(entrenamientos, salida):
 
 
 def matrices(ruta_test, salida):
-    # Una matriz por combinación, semilla 42, para no saturar la presentación.
-    fig, ejes = plt.subplots(3, 2, figsize=(12, 15))
+    # Una matriz por combinación (semilla 42), con etiquetas breves y sin solapamientos.
+    nombres = {'dinov3_vit_s_16': 'DINOv3',
+               'mobilenetv4_conv_small': 'MobileNetV4',
+               'yolo26n_cls': 'YOLO26n-cls'}
+    clases = {'Fresh Aloe Vera': 'Sana', 'Rot Aloe Vera': 'Podredumbre',
+              'Rust Aloe Vera': 'Roya'}
+    fig, ejes = plt.subplots(3, 2, figsize=(11, 12.5),
+                            constrained_layout=True)
     for i, modelo in enumerate(MODELOS):
         for j, estrategia in enumerate(ESTRATEGIAS):
             archivo = ruta_test / f'matriz_{modelo}_{estrategia}_semilla_42.csv'
@@ -125,17 +137,25 @@ def matrices(ruta_test, salida):
                 raise FileNotFoundError(f'Falta matriz de confusión: {archivo}')
             matriz = pd.read_csv(archivo, index_col=0)
             eje = ejes[i, j]
-            imagen = eje.imshow(matriz.to_numpy(), cmap='Blues', vmin=0)
-            eje.set_xticks(range(len(matriz.columns)), [s.removeprefix('pred_') for s in matriz.columns],
-                           rotation=30, ha='right', fontsize=8)
-            eje.set_yticks(range(len(matriz.index)), [s.removeprefix('real_') for s in matriz.index], fontsize=8)
-            eje.set_title(f'{modelo} | {estrategia} | semilla 42')
-            eje.set_xlabel('Predicción')
-            eje.set_ylabel('Clase real')
-            for (y, x), numero in np.ndenumerate(matriz.to_numpy()):
-                eje.text(x, y, str(int(numero)), ha='center', va='center', fontsize=10,
-                         color='white' if numero > matriz.to_numpy().max() / 2 else 'black')
-    fig.suptitle('Matrices de confusión en prueba (semilla 42)')
+            valores = matriz.to_numpy()
+            eje.imshow(valores, cmap='Blues', vmin=0)
+            etiquetas_x = [clases.get(str(s).removeprefix('pred_'), str(s).removeprefix('pred_'))
+                           for s in matriz.columns]
+            etiquetas_y = [clases.get(str(s).removeprefix('real_'), str(s).removeprefix('real_'))
+                           for s in matriz.index]
+            eje.set_xticks(range(len(etiquetas_x)), etiquetas_x, fontsize=9)
+            eje.set_yticks(range(len(etiquetas_y)), etiquetas_y, fontsize=9)
+            eje.tick_params(axis='x', labelrotation=0)
+            eje.set_title(f'{nombres.get(modelo, modelo)} | '
+                          f'{"Desde cero" if estrategia == "desde_cero" else "Transferencia"}',
+                          fontsize=11, pad=10)
+            eje.set_xlabel('Predicción', fontsize=9)
+            eje.set_ylabel('Clase real', fontsize=9)
+            umbral = valores.max() / 2
+            for (y, x), numero in np.ndenumerate(valores):
+                eje.text(x, y, str(int(numero)), ha='center', va='center', fontsize=11,
+                         color='white' if numero > umbral else 'black')
+    fig.suptitle('Matrices de confusión en prueba | semilla 42', fontsize=14)
     guardar_figura(fig, salida / 'matrices_confusion.png')
 
 
@@ -170,3 +190,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
