@@ -51,22 +51,26 @@ def comparativa(resumen_val, resumen_test, salida):
     nombres = {'dinov3_vit_s_16': 'DINOv3',
                'mobilenetv4_conv_small': 'MobileNetV4',
                'yolo26n_cls': 'YOLO26n-cls'}
-    fig, ejes = plt.subplots(1, 2, figsize=(12, 4.7), sharey=True,
+    fig, ejes = plt.subplots(1, 2, figsize=(10, 3.9), sharey=True,
                             constrained_layout=True)
     for eje, tabla, titulo in [(ejes[0], resumen_val, 'Validación (347 imágenes)'),
                                (ejes[1], resumen_test, 'Prueba (349 imágenes)')]:
         etiquetas = [f'{nombres.get(m, m)}\n{"Cero" if e == "desde_cero" else "Transfer."}'
                      for m, e in zip(tabla['modelo'], tabla['estrategia'])]
         x = np.arange(len(tabla))
-        eje.bar(x, tabla['f1_promedio'], yerr=tabla['f1_desviacion'], capsize=3,
-                width=0.7)
-        eje.set_xticks(x, etiquetas, fontsize=8)
-        eje.set_ylim(0, 1.06)
+        barras = eje.bar(x, tabla['f1_promedio'], yerr=tabla['f1_desviacion'], capsize=3,
+                         width=0.65)
+        for barra, valor, desviacion in zip(barras, tabla['f1_promedio'], tabla['f1_desviacion']):
+            eje.text(barra.get_x() + barra.get_width() / 2,
+                     min(float(valor) + float(desviacion) + 0.014, 1.075),
+                     f'{valor:.4f}', ha='center', va='bottom', fontsize=7)
+        eje.set_xticks(x, etiquetas, fontsize=7)
+        eje.set_ylim(0, 1.11)
         eje.set_title(titulo, fontsize=11)
         eje.grid(axis='y', alpha=0.2)
         eje.set_axisbelow(True)
     ejes[0].set_ylabel('F1 macro')
-    fig.suptitle('F1 macro promedio ± desviación estándar (semillas 7 y 42)', fontsize=12)
+    fig.suptitle('F1 macro promedio ± desviación estándar (semillas 7 y 42)', fontsize=11)
     guardar_figura(fig, salida / 'comparacion_f1.png')
 
 
@@ -76,7 +80,7 @@ def curvas(entrenamientos, salida):
     except ImportError:
         print('Curvas omitidas: tensorboard no está instalado.')
         return
-    fig, ejes = plt.subplots(2, 2, figsize=(13, 9), sharex=False)
+    fig, ejes = plt.subplots(2, 2, figsize=(9, 6.5), sharex=False, constrained_layout=True)
     metricas = [('train/loss', 'Pérdida de entrenamiento'),
                 ('val/loss', 'Pérdida de validación'),
                 ('val/f1_macro', 'F1 macro de validación')]
@@ -128,7 +132,7 @@ def matrices(ruta_test, salida):
                'yolo26n_cls': 'YOLO26n-cls'}
     clases = {'Fresh Aloe Vera': 'Sana', 'Rot Aloe Vera': 'Podredumbre',
               'Rust Aloe Vera': 'Roya'}
-    fig, ejes = plt.subplots(3, 2, figsize=(11, 12.5),
+    fig, ejes = plt.subplots(3, 2, figsize=(8.5, 9),
                             constrained_layout=True)
     for i, modelo in enumerate(MODELOS):
         for j, estrategia in enumerate(ESTRATEGIAS):
@@ -148,14 +152,14 @@ def matrices(ruta_test, salida):
             eje.tick_params(axis='x', labelrotation=0)
             eje.set_title(f'{nombres.get(modelo, modelo)} | '
                           f'{"Desde cero" if estrategia == "desde_cero" else "Transferencia"}',
-                          fontsize=11, pad=10)
+                          fontsize=10, pad=7)
             eje.set_xlabel('Predicción', fontsize=9)
             eje.set_ylabel('Clase real', fontsize=9)
             umbral = valores.max() / 2
             for (y, x), numero in np.ndenumerate(valores):
                 eje.text(x, y, str(int(numero)), ha='center', va='center', fontsize=11,
                          color='white' if numero > umbral else 'black')
-    fig.suptitle('Matrices de confusión en prueba | semilla 42', fontsize=14)
+    fig.suptitle('Matrices de confusión en prueba | semilla 42', fontsize=12)
     guardar_figura(fig, salida / 'matrices_confusion.png')
 
 
